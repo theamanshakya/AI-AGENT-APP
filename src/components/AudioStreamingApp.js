@@ -282,19 +282,6 @@ const AudioStreamingApp = () => {
                 <span>Stop</span>
               </span>
             </button>
-          </div>
-
-          {/* Conversation Display */}
-          <div className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Conversation</h2>
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {receivedText.map((text, index) => (
-                <p key={index} className="whitespace-pre-wrap p-4 bg-gray-50 rounded-lg text-gray-700">{text}</p>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-center">
             <button
               type="button"
               onClick={clearAll}
@@ -307,6 +294,16 @@ const AudioStreamingApp = () => {
                 <span>Clear all</span>
               </span>
             </button>
+          </div>
+
+          {/* Conversation Display */}
+          <div className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Conversation</h2>
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {receivedText.map((text, index) => (
+                <p key={index} className="whitespace-pre-wrap p-4 bg-gray-50 rounded-lg text-gray-700">{text}</p>
+              ))}
+            </div>
           </div>
         </div>
       </form>
