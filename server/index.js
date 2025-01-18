@@ -1,16 +1,31 @@
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
-
-// Load environment variables
-dotenv.config();
+const config = require('./config/config');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = config.getPort();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Config endpoint
+app.get('/api/config', (req, res) => {
+  try {
+    // Only send necessary config to frontend
+    res.json({
+      endpoint: config.getEndpoint(),
+      deploymentModel: config.getDeploymentModel(),
+      isAzureOpenAI: config.getIsAzureOpenAI(),
+      systemMessage: config.getSystemMessage(),
+      temperature: config.getTemperature(),
+      voice: config.getVoice()
+    });
+  } catch (error) {
+    console.error('Error fetching config:', error);
+    res.status(500).json({ error: 'Failed to fetch configuration' });
+  }
+});
 
 // Test route
 app.get('/api/health', (req, res) => {

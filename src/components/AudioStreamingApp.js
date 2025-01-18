@@ -5,13 +5,13 @@ import { Recorder } from "./recorder";
 
 const AudioStreamingApp = () => {
   const [inputState, setInputState] = useState('readyToStart');
-  const [endpoint] = useState('https://ai-talibahmed0504ai310861974661.openai.azure.com/');
-  const [apiKey] = useState('Bd7U6uErjmvDNutguAD8K0xKUxIH9ZMWG8ssd3gOWyreprDy2vEPJQQJ99ALACHYHv6XJ3w3AAAAACOG7qA2');
-  const [deploymentOrModel] = useState('gpt-4o-realtime-preview');
+  const [endpoint, setEndpoint] = useState('');
+  const [apiKey] = useState('');  // We'll get this from backend securely
+  const [deploymentOrModel, setDeploymentOrModel] = useState('');
   const [isAzureOpenAI, setIsAzureOpenAI] = useState(true);
-  const [systemMessage] = useState('You are a friendly and helpful Female AI assistant. Respond naturally and conversationally, as if talking to a friend. Show empathy and understanding. Ask clarifying questions when needed. Keep responses concise but informative.');
-  const [temperature] = useState('0.8');
-  const [voice] = useState('alloy');
+  const [systemMessage, setSystemMessage] = useState('');
+  const [temperature, setTemperature] = useState('0.8');
+  const [voice, setVoice] = useState('alloy');
   const [receivedText, setReceivedText] = useState([]);
 
   const realtimeStreamingRef = useRef(null);
@@ -22,6 +22,28 @@ const AudioStreamingApp = () => {
   const latestInputSpeechBlockRef = useRef(null);
 
   const voices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'];
+
+  // Fetch config from backend
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/config');
+        const config = await response.json();
+        
+        setEndpoint(config.endpoint);
+        setDeploymentOrModel(config.deploymentModel);
+        setIsAzureOpenAI(config.isAzureOpenAI);
+        setSystemMessage(config.systemMessage);
+        setTemperature(config.temperature.toString());
+        setVoice(config.voice);
+      } catch (error) {
+        console.error('Error fetching config:', error);
+        appendText("[Error]: Unable to fetch configuration from server");
+      }
+    };
+
+    fetchConfig();
+  }, []);
 
   useEffect(() => {
     guessIfIsAzureOpenAI();
