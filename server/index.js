@@ -14,6 +14,7 @@ app.get('/api/config', (req, res) => {
   try {
     // Only send necessary config to frontend
     res.json({
+      apiKey: config.getApiKey(),
       endpoint: config.getEndpoint(),
       deploymentModel: config.getDeploymentModel(),
       isAzureOpenAI: config.getIsAzureOpenAI(),

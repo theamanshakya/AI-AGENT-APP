@@ -6,7 +6,7 @@ import { Recorder } from "./recorder";
 const AudioStreamingApp = () => {
   const [inputState, setInputState] = useState('readyToStart');
   const [endpoint, setEndpoint] = useState('');
-  const [apiKey] = useState('');  // We'll get this from backend securely
+  const [apiKey, setApiKey] = useState('');  // We'll get this from backend securely
   const [deploymentOrModel, setDeploymentOrModel] = useState('');
   const [isAzureOpenAI, setIsAzureOpenAI] = useState(true);
   const [systemMessage, setSystemMessage] = useState('');
@@ -29,7 +29,7 @@ const AudioStreamingApp = () => {
       try {
         const response = await fetch('http://localhost:5000/api/config');
         const config = await response.json();
-        
+        setApiKey(config.apiKey);
         setEndpoint(config.endpoint);
         setDeploymentOrModel(config.deploymentModel);
         setIsAzureOpenAI(config.isAzureOpenAI);
