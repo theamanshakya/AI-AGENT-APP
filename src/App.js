@@ -1,23 +1,14 @@
-import logo from './logo.svg';
 import './App.css';
+import AudioStreamingApp from './components/AudioStreamingApp';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-blue-400 to-blue-600 py-6 flex flex-col justify-center sm:py-12">
+      <div className="relative py-3 w-5/6 sm:mx-auto">
+        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-5">
+          <AudioStreamingApp />
+        </div>
+      </div>
     </div>
   );
 }
