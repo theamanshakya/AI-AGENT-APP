@@ -9,7 +9,6 @@ const config = {
   isAzureOpenAI: process.env.IS_AZURE_OPENAI === 'true',
   systemMessage: process.env.SYSTEM_MESSAGE,
   temperature: parseFloat(process.env.TEMPERATURE) || 0.8,
-  voice: process.env.VOICE,
   port: process.env.PORT || 5000
 };
 
@@ -26,7 +25,6 @@ const getConfig = () => {
     getIsAzureOpenAI: () => config.isAzureOpenAI,
     getSystemMessage: () => config.systemMessage,
     getTemperature: () => config.temperature,
-    getVoice: () => config.voice,
     getPort: () => config.port
   };
 };
