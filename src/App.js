@@ -1,15 +1,66 @@
-import './App.css';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import Login from './components/Login';
+import Register from './components/Register';
+import AgentsList from './components/AgentsList';
+import CreateAgent from './components/CreateAgent';
+import PrivateRoute from './components/PrivateRoute';
 import AudioStreamingApp from './components/AudioStreamingApp';
+import KnowledgeBase from './components/KnowledgeBase';
+import './styles/components.css';
 
 function App() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-blue-400 to-blue-600 py-6 flex flex-col justify-center sm:py-12">
-      <div className="relative py-3 w-5/6 sm:mx-auto">
-        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-5">
-          <AudioStreamingApp />
-        </div>
-      </div>
-    </div>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/agents"
+            element={
+              <PrivateRoute>
+                <AgentsList />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/agents/create"
+            element={
+              <PrivateRoute>
+                <CreateAgent />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/agents/:id"
+            element={
+              <PrivateRoute>
+                <CreateAgent />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/agents/:agentId/voice-chat"
+            element={
+              <PrivateRoute>
+                <AudioStreamingApp />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/agents/:agentId/knowledge"
+            element={
+              <PrivateRoute>
+                <KnowledgeBase />
+              </PrivateRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/agents" replace />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 
