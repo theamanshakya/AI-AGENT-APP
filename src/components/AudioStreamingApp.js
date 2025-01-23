@@ -3,6 +3,9 @@ import { LowLevelRTClient, SessionUpdateMessage, Voice } from "rt-client";
 import { Player } from "./player";
 import { Recorder } from "./recorder";
 import TTSSelector from './TTSSelector';
+import { useParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import config from '../config/config';
 
 const Message = ({ text, isUser }) => (
   <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
@@ -32,6 +35,8 @@ const Message = ({ text, isUser }) => (
 );
 
 const AudioStreamingApp = () => {
+  const { agentId } = useParams();
+  const { user } = useAuth();
   const [inputState, setInputState] = useState('readyToStart');
   const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');  // We'll get this from backend securely
@@ -47,6 +52,12 @@ const AudioStreamingApp = () => {
     elevenlabs: [],
     speechify: []
   });
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [agentConfig, setAgentConfig] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [error, setError] = useState(null);
 
   const realtimeStreamingRef = useRef(null);
   const audioRecorderRef = useRef(null);
@@ -54,6 +65,8 @@ const AudioStreamingApp = () => {
   const recordingActiveRef = useRef(false);
   const bufferRef = useRef(new Uint8Array());
   const latestInputSpeechBlockRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const voices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'];
 
@@ -99,6 +112,34 @@ const AudioStreamingApp = () => {
     };
     fetchTTSConfig();
   }, []);
+
+  // Fetch agent configuration on component mount
+  useEffect(() => {
+    const fetchAgentConfig = async () => {
+      try {
+        const response = await fetch(`${config.apiUrl}/agents/${agentId}`, {
+          headers: {
+            'Authorization': `Bearer ${user.token}`,
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch agent configuration');
+        }
+
+        const data = await response.json();
+        setAgentConfig(data);
+        // Set initial TTS configuration based on agent settings
+        setTTSProvider(data.tts_provider);
+        setVoice(data.tts_voice);
+      } catch (error) {
+        console.error('Error fetching agent config:', error);
+        setError('Failed to load agent configuration');
+      }
+    };
+
+    fetchAgentConfig();
+  }, [agentId, user.token]);
 
   const createConfigMessage = () => {
     let configMessage = {
@@ -353,97 +394,254 @@ const AudioStreamingApp = () => {
     setReceivedText([]);
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await processAudioInput(audioBlob);
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const processAudioInput = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob);
+    formData.append('agentId', agentId);
+
+    try {
+      // Send audio to speech-to-text
+      const sttResponse = await fetch(`${config.apiUrl}/stt`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: formData,
+      });
+
+      if (!sttResponse.ok) throw new Error('STT processing failed');
+      
+      const { text } = await sttResponse.json();
+      setTranscript(text);
+
+      // Get AI response
+      const aiResponse = await fetch(`${config.apiUrl}/agents/${agentId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ message: text }),
+      });
+
+      if (!aiResponse.ok) throw new Error('AI processing failed');
+      
+      const { response } = await aiResponse.json();
+
+      // Convert AI response to speech
+      const ttsResponse = await fetch(`${config.apiUrl}/tts/synthesize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          text: response,
+          provider: agentConfig.tts_provider,
+          voice: agentConfig.tts_voice,
+        }),
+      });
+
+      if (!ttsResponse.ok) throw new Error('TTS processing failed');
+
+      const audioBlob = await ttsResponse.blob();
+      playAudioResponse(audioBlob);
+    } catch (error) {
+      console.error('Error processing audio:', error);
+    }
+  };
+
+  const playAudioResponse = (audioBlob) => {
+    const audio = new Audio(URL.createObjectURL(audioBlob));
+    setIsPlaying(true);
+    
+    audio.onended = () => {
+      setIsPlaying(false);
+    };
+
+    audio.play();
+  };
+
+  // Function to handle conversation turns
+  const handleConversationTurn = async (userMessage) => {
+    try {
+      // Add user message to conversation
+      const newMessage = {
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, newMessage]);
+
+      // Send message to backend for processing
+      const response = await fetch(`${config.apiUrl}/agents/${agentId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          conversation_history: messages,
+          system_prompt: agentConfig.system_prompt
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get agent response');
+      }
+
+      const { response: aiResponse } = await response.json();
+
+      // Add AI response to conversation
+      const aiMessage = {
+        role: 'assistant',
+        content: aiResponse,
+        timestamp: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, aiMessage]);
+
+      // Convert AI response to speech
+      await synthesizeSpeech(aiResponse);
+
+      // Save conversation for training
+      await saveConversationTurn(newMessage, aiMessage);
+
+    } catch (error) {
+      console.error('Error in conversation:', error);
+      setError('Failed to process conversation');
+    }
+  };
+
+  // Function to save conversation turns for training
+  const saveConversationTurn = async (userMessage, aiMessage) => {
+    try {
+      await fetch(`${config.apiUrl}/agents/${agentId}/training`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          user_message: userMessage,
+          ai_message: aiMessage,
+          domain: agentConfig.domain,
+          learning_mode: agentConfig.learning_mode
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving conversation for training:', error);
+    }
+  };
+
+  // Function to synthesize speech from text
+  const synthesizeSpeech = async (text) => {
+    try {
+      setIsPlaying(true);
+      const response = await fetch(`${config.apiUrl}/tts/synthesize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          text,
+          provider: agentConfig.tts_provider,
+          voice: agentConfig.tts_voice,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('TTS synthesis failed');
+      }
+
+      const audioBlob = await response.blob();
+      const audio = new Audio(URL.createObjectURL(audioBlob));
+      
+      audio.onended = () => {
+        setIsPlaying(false);
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.error('Error synthesizing speech:', error);
+      setIsPlaying(false);
+      setError('Failed to synthesize speech');
+    }
+  };
+
   return (
     <div className="w-5/6 mx-auto bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
-        <TTSSelector
-          provider={ttsProvider}
-          setProvider={setTTSProvider}
-          voice={voice}
-          setVoice={handleVoiceChange}
-          voices={availableVoices}
-          loading={inputState === 'working'}
-        />
-        <div className="space-y-6">
-          {/* Control Buttons */}
-          <div className="flex justify-center space-x-6">
-            <button
-              type="button"
-              onClick={startRealtime}
-              disabled={inputState !== 'readyToStart'}
-              className="px-6 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transform hover:scale-105 transition-all duration-200 font-semibold"
-            >
-              <span className="flex items-center space-x-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-                <span>Start</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={stopRealtime}
-              disabled={inputState !== 'readyToStop'}
-              className="px-6 py-3 text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 transform hover:scale-105 transition-all duration-200 font-semibold"
-            >
-              <span className="flex items-center space-x-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                </svg>
-                <span>Stop</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={clearAll}
-              className="px-6 py-3 text-white bg-gray-600 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 font-semibold"
-            >
-              <span className="flex items-center space-x-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span>Clear all</span>
-              </span>
-            </button>
+      {agentConfig ? (
+        <div className="p-4">
+          <div className="mb-4 bg-white rounded-lg p-4 shadow">
+            <h2 className="text-xl font-bold">{agentConfig.name}</h2>
+            <p className="text-gray-600">Domain: {agentConfig.domain}</p>
+            <p className="text-gray-600">Learning Mode: {agentConfig.learning_mode}</p>
           </div>
 
-          {/* Conversation Display */}
-          <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <div className="border-b border-gray-200 p-4">
-              <h2 className="text-xl font-semibold text-gray-800">Conversation</h2>
-            </div>
-            
-            {/* Chat Messages Container */}
-            <div className="p-4 h-[500px] overflow-y-auto bg-gray-50">
-              <div className="space-y-2">
-                {receivedText.map((text, index) => {
-                  if (!text) return null; // Skip empty messages
-                  const isUser = text.startsWith("User:");
-                  const messageText = isUser ? text.substring(6) : text;
-                  return (
-                    <Message 
-                      key={index} 
-                      text={messageText} 
-                      isUser={isUser}
-                    />
-                  );
-                })}
-              </div>
+          {/* Conversation Interface */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="h-[500px] overflow-y-auto mb-4">
+              {messages.map((message, index) => (
+                <Message
+                  key={index}
+                  text={message.content}
+                  isUser={message.role === 'user'}
+                />
+              ))}
             </div>
 
-            {/* Status Bar */}
-            <div className="border-t border-gray-200 p-3 bg-gray-50">
-              <div className="flex items-center text-sm text-gray-500">
-                <div className={`w-2 h-2 rounded-full mr-2 ${
-                  inputState === 'readyToStop' ? 'bg-green-500' : 'bg-gray-400'
-                }`}></div>
-                {inputState === 'readyToStop' ? 'Recording...' : 'Click Start to begin conversation'}
-              </div>
+            {/* Recording Controls */}
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={isPlaying}
+                className={`px-4 py-2 rounded-lg ${
+                  isRecording 
+                    ? 'bg-red-500 hover:bg-red-600' 
+                    : 'bg-blue-500 hover:bg-blue-600'
+                } text-white`}
+              >
+                {isRecording ? 'Stop Recording' : 'Start Recording'}
+              </button>
             </div>
           </div>
         </div>
-      </form>
+      ) : error ? (
+        <div className="p-4 text-red-500">{error}</div>
+      ) : (
+        <div className="p-4">Loading agent configuration...</div>
+      )}
     </div>
   );
 };
