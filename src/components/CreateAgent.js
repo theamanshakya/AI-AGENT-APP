@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
-// import api from '../services/api';
+import api from '../services/api';
 import config from '../config/config';
 
 const CreateAgent = () => {
@@ -25,12 +25,7 @@ const CreateAgent = () => {
   useEffect(() => {
     const fetchVoices = async () => {
       try {
-        const response = await fetch(`${config.apiUrl}/tts/config`, {
-          headers: {
-            'Authorization': `Bearer ${user.token}`,
-          }
-        });
-        const data = await response.json();
+        const data = await api.getTTSConfig();
         setVoices(data.providers);
       } catch (error) {
         console.error('Error fetching voices:', error);
@@ -46,53 +41,9 @@ const CreateAgent = () => {
     }
   }, [id]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const url = id 
-        ? `${config.apiUrl}/agents/${id}`
-        : `${config.apiUrl}/agents`;
-      
-      const method = id ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) throw new Error(id ? 'Failed to update agent' : 'Failed to create agent');
-
-      const data = await response.json();
-      navigate(`/agents/${data.agent.id}`);
-    } catch (error) {
-      console.error('Error:', error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchAgentDetails = async (agentId) => {
     try {
-      const response = await fetch(`${config.apiUrl}/agents/${agentId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await api.getAgentById(agentId);
       setAgentData(data);
       setFormData({
         name: data.name || '',
@@ -105,6 +56,24 @@ const CreateAgent = () => {
     } catch (error) {
       console.error('Error fetching agent details:', error);
       setError('Failed to load agent details. Please try again later.');
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const data = id 
+        ? await api.updateAgent(id, formData)
+        : await api.createAgent(formData);
+      
+      navigate(`/agents/${data.agent.id}`);
+    } catch (error) {
+      console.error('Error:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 

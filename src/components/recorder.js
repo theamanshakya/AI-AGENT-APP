@@ -38,9 +38,9 @@ export class Recorder {
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach((track) => track.stop());
         }
-        if (this.audioContext) {
-            this.audioContext.close();
-        }
+        // if (this.audioContext) {
+        //     this.audioContext.close();
+        // }
     }
 }
   

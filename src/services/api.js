@@ -49,10 +49,27 @@ class ApiService {
     return this.request('/agents');
   }
 
+  async getAgentById(id) {
+    return this.request(`/agents/${id}`);
+  }
+
   async createAgent(agentData) {
     return this.request('/agents', {
       method: 'POST',
       body: JSON.stringify(agentData),
+    });
+  }
+
+  async updateAgent(id, agentData) {
+    return this.request(`/agents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(agentData),
+    });
+  }
+
+  async deleteAgent(id) {
+    return this.request(`/agents/${id}`, {
+      method: 'DELETE',
     });
   }
 
@@ -68,12 +85,16 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
 
-    return this.request(`/agents/${agentId}/knowledge/upload`, {
+    const token = localStorage.getItem('token');
+    return fetch(`${this.baseUrl}/agents/${agentId}/knowledge/upload`, {
       method: 'POST',
       headers: {
-        // Don't set Content-Type here, let the browser set it with the boundary
+        'Authorization': `Bearer ${token}`,
       },
       body: formData,
+    }).then(response => {
+      if (!response.ok) throw new Error('Upload failed');
+      return response.json();
     });
   }
 
@@ -89,6 +110,42 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ role: 'user', content }),
     });
+  }
+
+  // TTS endpoints
+  async getTTSConfig() {
+    return this.request('/tts/config');
+  }
+
+  async synthesizeSpeech(text, provider, voice) {
+    return this.request('/tts/synthesize', {
+      method: 'POST',
+      body: JSON.stringify({ text, provider, voice }),
+    });
+  }
+
+  // Training endpoints
+  async saveTrainingData(agentId, trainingData) {
+    return this.request(`/agents/${agentId}/training`, {
+      method: 'POST',
+      body: JSON.stringify(trainingData),
+    });
+  }
+
+  // Chat endpoints
+  async sendChatMessage(agentId, message, conversationHistory = []) {
+    return this.request(`/agents/${agentId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        conversation_history: conversationHistory
+      }),
+    });
+  }
+
+  // Config endpoint
+  async getConfig() {
+    return this.request('/config');
   }
 }
 
