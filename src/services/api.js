@@ -2,6 +2,7 @@ import config from '../config/config';
 
 class ApiService {
   constructor(baseUrl = config.apiUrl) {
+    console.log(baseUrl);
     this.baseUrl = baseUrl;
   }
 
@@ -21,9 +22,15 @@ class ApiService {
       ...options,
       headers,
     });
-
+    
     if (!response.ok) {
-      throw new Error(`API call failed: ${response.statusText}`);
+      // Get the error details from response if possible
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `API call failed: ${response.statusText}`);
+      } catch (e) {
+        throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+      }
     }
 
     return response.json();
