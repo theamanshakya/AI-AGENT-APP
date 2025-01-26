@@ -100,6 +100,41 @@ const AudioStreamingApp = () => {
     fetchTTSConfig();
   }, []);
 
+  const synthesizeSpeech = async (text) => {
+    try {
+      if (ttsProvider === 'azure') {
+        // Azure TTS is handled by the existing RT client
+        return;
+      }
+
+      const response = await fetch('http://localhost:5000/api/tts/synthesize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          provider: ttsProvider,
+          voice: voice
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('TTS synthesis failed');
+      }
+
+      const audioData = await response.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(audioData);
+      const source = audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContext.destination);
+      source.start(0);
+    } catch (error) {
+      console.error('Error synthesizing speech:', error);
+    }
+  };
+
   const createConfigMessage = () => {
     let configMessage = {
       type: "session.update",
@@ -109,12 +144,6 @@ const AudioStreamingApp = () => {
         },
         input_audio_transcription: {
           model: "whisper-1"
-        },
-        // Add voice configuration directly in the session
-        voice: voice,
-        tts: {
-          provider: ttsProvider,
-          voice: voice
         }
       }
     };
@@ -124,6 +153,15 @@ const AudioStreamingApp = () => {
     }
     if (!isNaN(parseFloat(temperature))) {
       configMessage.session.temperature = parseFloat(temperature);
+    }
+
+    // Only add TTS configuration for Azure
+    if (ttsProvider === 'azure') {
+      configMessage.session.voice = voice;
+      configMessage.session.tts = {
+        provider: ttsProvider,
+        voice: voice
+      };
     }
 
     return configMessage;
@@ -214,24 +252,29 @@ const AudioStreamingApp = () => {
           setInputState('readyToStop');
           const greeting = "Hello! I'm your AI assistant. How can I help you today?";
           appendText(greeting);
-          if (realtimeStreamingRef.current) {
-            // Send initial voice configuration with greeting
-            realtimeStreamingRef.current.send({
-              type: "text.generate",
-              text: greeting,
-              voice: voice,
-              provider: ttsProvider
-            });
+          if (ttsProvider === 'azure') {
+            if (realtimeStreamingRef.current) {
+              realtimeStreamingRef.current.send({
+                type: "text.generate",
+                text: greeting,
+                voice: voice,
+                provider: ttsProvider
+              });
+            }
+          } else {
+            await synthesizeSpeech(greeting);
           }
           break;
         case "response.audio_transcript.delta":
           appendToLastText(message.delta);
           break;
         case "response.audio.delta":
-          const binary = atob(message.delta);
-          const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-          const pcmData = new Int16Array(bytes.buffer);
-          audioPlayerRef.current.play(pcmData);
+          if (ttsProvider === 'azure') {
+            const binary = atob(message.delta);
+            const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+            const pcmData = new Int16Array(bytes.buffer);
+            audioPlayerRef.current.play(pcmData);
+          }
           break;
         case "input_audio_buffer.speech_started":
           latestInputSpeechBlockRef.current = receivedText.length;
@@ -242,6 +285,13 @@ const AudioStreamingApp = () => {
           appendText("AI: ");
           break;
         case "response.done":
+          // If using non-Azure TTS, synthesize the complete response
+          if (ttsProvider !== 'azure') {
+            const lastMessage = receivedText[receivedText.length - 2]; // Get the last AI response
+            if (lastMessage && lastMessage.startsWith('AI: ')) {
+              await synthesizeSpeech(lastMessage.substring(4));
+            }
+          }
           appendText("");
           break;
         default:

@@ -28,7 +28,9 @@ const TTSSelector = ({ provider, setProvider, voice, setVoice, voices, loading }
         <select
           value={provider}
           onChange={handleProviderChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${
+            loading ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           disabled={loading}
         >
           <option value="azure">Azure TTS</option>
@@ -42,21 +44,29 @@ const TTSSelector = ({ provider, setProvider, voice, setVoice, voices, loading }
           Voice
         </label>
         <select
-          value={voice || ''}  
+          value={voice || ''}
           onChange={(e) => setVoice(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${
+            loading || availableVoices.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           disabled={loading || availableVoices.length === 0}
         >
           {availableVoices.length === 0 && (
             <option value="">No voices available</option>
           )}
           {availableVoices.map((v) => (
-            <option key={v} value={v}>
-              {v}
+            <option key={v.id} value={v.id}>
+              {v.name}
             </option>
           ))}
         </select>
       </div>
+
+      {loading && (
+        <div className="text-sm text-gray-500">
+          Synthesizing speech...
+        </div>
+      )}
     </div>
   );
 };
